@@ -1,0 +1,283 @@
+
+import streamlit as st
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import time
+from PIL import Image
+import tempfile
+
+choice = st.radio("Choose an option",("Upload an image","Upload a video", "Choose your webcam"))
+if choice == "Upload an image":
+    frame = st.file_uploader("Upload",type=["jpeg", "jpg", "png", "jfif"])
+    if frame:
+        frame1 = Image.open(frame)
+        frame = np.array(frame1)
+        net = cv2.dnn.readNetFromDarknet('yolov3-tiny_obj.cfg', 'yolov3-tiny_obj_best.weights')
+        classes = ["Headphone", "Wallet"]
+        layer_names = net.getLayerNames()
+        outputlayers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
+        colors = np.random.uniform(0,255,size=(len(classes),3))
+        starting_time = time.time()
+        frame_id = 0
+        font = cv2.FONT_HERSHEY_PLAIN
+        no_of_classes = []
+
+        frame_window = st.image([])
+        frame_text = st.markdown("")
+        frame_text1 = st.markdown("")
+        frame_text2 = st.markdown("")
+        frame_text3 = st.markdown("")
+
+        if frame1:
+            height,width,channels = frame.shape 
+            blob = cv2.dnn.blobFromImage(frame, 1/255, (416, 416), (0,0,0), swapRB =True, crop = False)
+            net.setInput(blob)
+            outs = net.forward(outputlayers)
+            boxes = []
+            confidences = []
+            class_ids = []
+            for output in outs:
+                for detection in output:
+                    score = detection[5:]
+                    class_id = np.argmax(score)
+                    confidence = score[class_id]
+                    if confidence > .6:
+                        center_x = int(detection[0] * width)
+                        center_y = int(detection[1] * height)
+                        w = int(detection[2]*width)
+                        h = int(detection[3]*height)
+                        x = int(center_x - w/2)
+                        y = int(center_y - h/2)
+                        boxes.append([x,y,w,h])
+                        confidences.append((float(confidence)))
+                        class_ids.append(class_id)
+            indexes = cv2.dnn.NMSBoxes(boxes, confidences, 0.6,.4)
+            for i in range(len(boxes)):
+                if i in indexes:
+                    x,y,w,h = boxes[i]
+                    label = str(classes[class_ids[i]])
+                    confidence = confidences[i]
+                    color = colors[class_ids[i]]
+                    cv2.rectangle(frame, (x,y), (x+w, y+h), color,2)
+                    a = str(round(confidence,2))
+                    cv2.putText(frame, label + ' ' + str(round(confidence,2)), (x,y+30), font, 1, (255,255,255),2)
+
+            elapsed_time = time.time() - starting_time
+            fps=frame_id/elapsed_time
+            #code to change the blue intensive video to normal
+            img_np = frame
+            frame = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+            #adding the frame to above created empty frame_window
+            frame1 = cv2.putText(frame, 'FPS:'+str(round(fps,2)), (10,50), font, 2, (0,0,0),1)
+            frame_window.image(frame1)
+
+
+
+            class_name = ([classes[x] for x in class_ids])
+            len_cl = len(class_name)
+            no_of_classes.append(len_cl)
+            #frame_text2.markdown(class_name)
+            separator = ", "
+            frame_text2.markdown('Items: ' + separator.join(map(str, class_name)))
+            frame_text3.markdown('Number of items: '+str(len_cl))
+if choice == "Upload a video":
+    frame = st.file_uploader("Upload",type=["mp4"])
+    st.title("Object Detection")
+    st.sidebar.markdown("# Model")
+    confidence_threshold = st.sidebar.slider("Confidence threshold", 0.0, 1.0, 0.5, 0.01)
+
+
+    net = cv2.dnn.readNetFromDarknet('yolov3-tiny_obj.cfg', 'yolov3-tiny_obj_best.weights')
+    classes = ["Headphone", "Wallet"]
+    layer_names = net.getLayerNames()
+    outputlayers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
+    colors = np.random.uniform(0,255,size=(len(classes),3))
+    
+
+    
+    starting_time = time.time()
+    frame_id = 0
+    font = cv2.FONT_HERSHEY_PLAIN
+    no_of_classes = []
+
+    frame_window = st.image([])
+    frame_text = st.markdown("")
+    frame_text1 = st.markdown("")
+    frame_text2 = st.markdown("")
+    frame_text3 = st.markdown("")
+    if frame:
+        tfile = tempfile.NamedTemporaryFile(delete=False) 
+        tfile.write(frame.read())
+        vf = cv2.VideoCapture(tfile.name)
+
+        while vf:
+            _,frame=vf.read()
+
+            height,width,channels = frame.shape 
+            blob = cv2.dnn.blobFromImage(frame, 1/255, (416, 416), (0,0,0), swapRB =True, crop = False)
+            net.setInput(blob)
+            outs = net.forward(outputlayers)
+            boxes = []
+            confidences = []
+            class_ids = []
+            for output in outs:
+                for detection in output:
+                    score = detection[5:]
+                    class_id = np.argmax(score)
+                    confidence = score[class_id]
+                    if confidence > .6:
+                        center_x = int(detection[0] * width)
+                        center_y = int(detection[1] * height)
+                        w = int(detection[2]*width)
+                        h = int(detection[3]*height)
+                        x = int(center_x - w/2)
+                        y = int(center_y - h/2)
+                        boxes.append([x,y,w,h])
+                        confidences.append((float(confidence)))
+                        class_ids.append(class_id)
+            indexes = cv2.dnn.NMSBoxes(boxes, confidences, confidence_threshold,.4)
+            for i in range(len(boxes)):
+                if i in indexes:
+                    x,y,w,h = boxes[i]
+                    label = str(classes[class_ids[i]])
+                    confidence = confidences[i]
+                    color = colors[class_ids[i]]
+                    cv2.rectangle(frame, (x,y), (x+w, y+h), color,2)
+                    a = str(round(confidence,2))
+                    cv2.putText(frame, label + ' ' + str(round(confidence,2)), (x,y+30), font, 1, (255,255,255),2)
+                    
+            elapsed_time = time.time() - starting_time
+            fps=frame_id/elapsed_time
+            #code to change the blue intensive video to normal
+            img_np = np.array(frame)
+            frame = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+            #adding the frame to above created empty frame_window
+            frame1 = cv2.putText(frame, 'FPS:'+str(round(fps,2)), (10,50), font, 2, (0,0,0),1)
+            frame_window.image(frame1)
+            
+            
+            
+            class_name = ([classes[x] for x in class_ids])
+            len_cl = len(class_name)
+            no_of_classes.append(len_cl)
+            #frame_text2.markdown(class_name)
+            separator = ", "
+            frame_text2.markdown('Items: ' + separator.join(map(str, class_name)))
+            frame_text3.markdown('Number of items: '+str(len_cl))
+            if len(no_of_classes) <= 1:
+                pass
+            elif len(no_of_classes)>1:
+                n = len(no_of_classes)
+                a = int(no_of_classes[n-1])-int(no_of_classes[n-2])
+                if a >= 1:
+                    frame_text.markdown('Item is added')
+                elif a==0:
+                    frame_text.markdown('All items are intact')
+                elif a<0:
+                    frame_text.warning("Item is missing")
+if choice == "Choose your webcam":
+
+    #import tempfile
+    st.title("Object Detection")
+    st.sidebar.markdown("# Model")
+    confidence_threshold = st.sidebar.slider("Confidence threshold", 0.0, 1.0, 0.5, 0.01)
+
+
+    net = cv2.dnn.readNetFromDarknet('yolov3-tiny_obj.cfg', 'yolov3-tiny_obj_best.weights')
+    classes = ["Headphone", "Wallet"]
+    layer_names = net.getLayerNames()
+    outputlayers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
+    colors = np.random.uniform(0,255,size=(len(classes),3))
+    run=st.checkbox('Open/Close your Webcam')
+    video = cv2.VideoCapture(0)
+
+    
+    starting_time = time.time()
+    frame_id = 0
+    font = cv2.FONT_HERSHEY_PLAIN
+    no_of_classes = []
+
+    frame_window = st.image([])
+    frame_text = st.markdown("")
+    frame_text1 = st.markdown("")
+    frame_text2 = st.markdown("")
+    frame_text3 = st.markdown("")
+    while run:
+        _,frame=video.read()
+        #a = frame_window.image(frame)
+        #st.write(a)
+
+        height,width,channels = frame.shape 
+        blob = cv2.dnn.blobFromImage(frame, 1/255, (416, 416), (0,0,0), swapRB =True, crop = False)
+        net.setInput(blob)
+        outs = net.forward(outputlayers)
+        boxes = []
+        confidences = []
+        class_ids = []
+        for output in outs:
+            for detection in output:
+                score = detection[5:]
+                class_id = np.argmax(score)
+                confidence = score[class_id]
+                if confidence > .6:
+                    center_x = int(detection[0] * width)
+                    center_y = int(detection[1] * height)
+                    w = int(detection[2]*width)
+                    h = int(detection[3]*height)
+                    x = int(center_x - w/2)
+                    y = int(center_y - h/2)
+                    boxes.append([x,y,w,h])
+                    confidences.append((float(confidence)))
+                    class_ids.append(class_id)
+        indexes = cv2.dnn.NMSBoxes(boxes, confidences, confidence_threshold,.4)
+        for i in range(len(boxes)):
+            if i in indexes:
+                x,y,w,h = boxes[i]
+                label = str(classes[class_ids[i]])
+                confidence = confidences[i]
+                color = colors[class_ids[i]]
+                cv2.rectangle(frame, (x,y), (x+w, y+h), color,2)
+                a = str(round(confidence,2))
+                cv2.putText(frame, label + ' ' + str(round(confidence,2)), (x,y+30), font, 1, (255,255,255),2)
+                
+        elapsed_time = time.time() - starting_time
+        fps=frame_id/elapsed_time
+        #code to change the blue intensive video to normal
+        img_np = np.array(frame)
+        frame = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+        #adding the frame to above created empty frame_window
+        frame1 = cv2.putText(frame, 'FPS:'+str(round(fps,2)), (10,50), font, 2, (0,0,0),1)
+        frame_window.image(frame1)
+        
+        
+        
+        class_name = ([classes[x] for x in class_ids])
+        len_cl = len(class_name)
+        no_of_classes.append(len_cl)
+        #frame_text2.markdown(class_name)
+        separator = ", "
+        frame_text2.markdown('Items: ' + separator.join(map(str, class_name)))
+        frame_text3.markdown('Number of items: '+str(len_cl))
+        if len(no_of_classes) <= 1:
+            pass
+        elif len(no_of_classes)>1:
+            n = len(no_of_classes)
+            a = int(no_of_classes[n-1])-int(no_of_classes[n-2])
+            if a >= 1:
+                frame_text.markdown('Item is added')
+            elif a==0:
+                frame_text.markdown('All items are intact')
+            elif a<0:
+                frame_text.warning("Item is missing")
+                #time.sleep(2)
+                #frame_text1.markdown('')
+        #time.sleep(1)         
+        
+        #frame_text.markdown(str(class_name))
+        #if len(class_name) == 0:
+            #frame_text.markdown('Item is not found')
+            
+        #run=st.checkbox("Close", value = False)
+    
+
